@@ -1,0 +1,50 @@
+document.addEventListener("DOMContentLoaded", () => {
+  // Simulate user login state
+  let isLoggedIn = true; // Change to false to test logged out state
+  let username = "Admin User";
+  let userRole = "admin"; // Change to "user" to test normal user
+
+  // DOM elements
+  const loginLink = document.getElementById("loginLink");
+  const registerLink = document.getElementById("registerLink");
+  const userDropdown = document.getElementById("userDropdown");
+  const usernameDisplay = document.getElementById("usernameDisplay");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const adminItems = document.querySelectorAll(".role-admin");
+
+  function updateNav() {
+    if (isLoggedIn) {
+      // Hide Login/Register links
+      loginLink.classList.add("d-none");
+      registerLink.classList.add("d-none");
+
+      // Show user dropdown
+      userDropdown.classList.remove("d-none");
+      usernameDisplay.textContent = username;
+
+      // Show/hide admin links based on role
+      if (userRole === "admin") {
+        adminItems.forEach((el) => el.classList.remove("d-none"));
+      } else {
+        adminItems.forEach((el) => el.classList.add("d-none"));
+      }
+    } else {
+      // Show Login/Register links
+      loginLink.classList.remove("d-none");
+      registerLink.classList.remove("d-none");
+
+      // Hide user dropdown
+      userDropdown.classList.add("d-none");
+    }
+  }
+
+  // Logout click handler
+  logoutBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    isLoggedIn = false;
+    updateNav();
+  });
+
+  // Initial render
+  updateNav();
+});

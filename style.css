@@ -1,0 +1,14 @@
+body {
+    background-color: #f8f9fa;
+}
+
+h1 {
+    color: #333;
+}
+.navbar {
+    padding: 1rem 0;
+}
+
+.dropdown-menu {
+    min-width: 200px;
+}
