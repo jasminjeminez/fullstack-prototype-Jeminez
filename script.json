@@ -1,50 +1,738 @@
-document.addEventListener("DOMContentLoaded", () => {
-  // Simulate user login state
-  let isLoggedIn = true; // Change to false to test logged out state
-  let username = "Admin User";
-  let userRole = "admin"; // Change to "user" to test normal user
+/* DOM HELPER */
+const $ = id => document.getElementById(id);
 
-  // DOM elements
-  const loginLink = document.getElementById("loginLink");
-  const registerLink = document.getElementById("registerLink");
-  const userDropdown = document.getElementById("userDropdown");
-  const usernameDisplay = document.getElementById("usernameDisplay");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const adminItems = document.querySelectorAll(".role-admin");
+function save(key, data) {
+  localStorage.setItem(key, JSON.stringify(data));
+}
 
-  function updateNav() {
-    if (isLoggedIn) {
-      // Hide Login/Register links
-      loginLink.classList.add("d-none");
-      registerLink.classList.add("d-none");
+function load(key, defaultValue = []) {
+  let data = localStorage.getItem(key);
+  return data ? JSON.parse(data) : defaultValue;
+}
 
-      // Show user dropdown
-      userDropdown.classList.remove("d-none");
-      usernameDisplay.textContent = username;
+function getCurrentUser() {
+  return load("currentUser", null);
+}
 
-      // Show/hide admin links based on role
-      if (userRole === "admin") {
-        adminItems.forEach((el) => el.classList.remove("d-none"));
-      } else {
-        adminItems.forEach((el) => el.classList.add("d-none"));
-      }
-    } else {
-      // Show Login/Register links
-      loginLink.classList.remove("d-none");
-      registerLink.classList.remove("d-none");
+function setCurrentUser(user) {
+  save("currentUser", user);
+}
 
-      // Hide user dropdown
-      userDropdown.classList.add("d-none");
-    }
+/*  ADMIN SEED  */
+
+function seedAdmin() {
+  let users = load("users");
+
+  if (!users.some(u => u.role === "admin")) {
+    users.push({
+      id: 1,
+      firstName: "Admin",
+      lastName: "User",
+      email: "admin@example.com",
+      password: "admin123",
+      role: "admin",
+      isVerified: true
+    });
+    save("users", users);
   }
 
-  // Logout click handler
-  logoutBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    isLoggedIn = false;
-    updateNav();
+  // Seed default departments
+  let departments = load("departments");
+  if (departments.length === 0) {
+    const defaultDepts = [
+      { id: 1, name: "Engineering", desc: "Engineering Department" },
+      { id: 2, name: "HR", desc: "Human Resources" },
+      { id: 3, name: "Finance", desc: "Finance Department" },
+      { id: 4, name: "IT", desc: "Information Technology" },
+      { id: 5, name: "Accounting", desc: "Accounting Department" },
+      { id: 6, name: "Marketing", desc: "Marketing Department" }
+    ];
+    save("departments", defaultDepts);
+  }
+}
+
+/*  NAVIGATION */
+
+function goToPage(name) {
+  const adminPages = ["employees", "departments", "accounts"];
+  let user = getCurrentUser();
+
+  if (adminPages.includes(name) && (!user || user.role !== "admin")) {
+    alert("Admin access only");
+    return;
+  }
+
+  document.querySelectorAll(".page").forEach(p => p.style.display = "none");
+  $(name + "Page").style.display = "block";
+  $("dropdownMenu").style.display = "none";
+
+  if (name === "profile") loadProfile();
+  if (name === "requests") loadRequests();
+  if (name === "employees") {
+    renderEmployeesTable();
+  }
+  if (name === "departments") loadDepartments();
+  if (name === "accounts") loadAccounts();
+}
+
+/*  AUTH  */
+
+function handleRegister() {
+  let firstName = $("regFirstName").value.trim();
+  let lastName = $("regLastName").value.trim();
+  let email = $("regEmail").value.trim();
+  let password = $("regPassword").value.trim();
+
+  if (!firstName || !lastName || !email || !password)
+    return alert("Fill all fields");
+
+  let users = load("users");
+  if (users.find(u => u.email === email))
+    return alert("Email already exists");
+
+  users.push({
+    id: Date.now(),
+    firstName,
+    lastName,
+    email,
+    password,
+    role: "user",
+    isVerified: false
   });
 
-  // Initial render
-  updateNav();
+  save("users", users);
+  goToPage("verify");
+}
+
+function simulateVerification() {
+  let users = load("users");
+  let lastUser = users[users.length - 1];
+  if (!lastUser) return;
+  lastUser.isVerified = true;
+  save("users", users);
+  goToPage("login");
+}
+
+function handleLogin() {
+  let email = $("loginEmail").value.trim();
+  let password = $("loginPassword").value.trim();
+  let users = load("users");
+
+  let user = users.find(u => u.email === email && u.password === password);
+  if (!user) return alert("Invalid credentials");
+  if (!user.isVerified) return alert("Verify your email first");
+
+  setCurrentUser(user);
+  updateNavbar();
+  goToPage("profile");
+}
+
+function userLogout() {
+  localStorage.removeItem("currentUser");
+  updateNavbar();
+  goToPage("home");
+}
+
+/* NAVBAR */
+
+function updateNavbar() {
+  let user = getCurrentUser();
+  if (user) {
+    $("authLinks").style.display = "none";
+    $("userDropdown").style.display = "block";
+    $("usernameDisplay").textContent = user.firstName;
+    $("adminLinks").style.display = user.role === "admin" ? "block" : "none";
+  } else {
+    $("authLinks").style.display = "flex";
+    $("userDropdown").style.display = "none";
+  }
+}
+
+function toggleDropdown() {
+  let menu = $("dropdownMenu");
+  menu.style.display = menu.style.display === "block" ? "none" : "block";
+}
+
+/*  PROFILE  */
+
+function loadProfile() {
+  let user = getCurrentUser();
+  if (!user) return;
+  $("profileName").textContent = user.firstName + " " + user.lastName;
+  $("profileEmail").textContent = user.email;
+  $("profileRole").textContent = user.role.toUpperCase();
+}
+
+/*  REQUESTS  */
+
+function showRequestModal() {
+  $("reqType").value = "";
+  initializeItemsList();
+  $("requestModal").style.display = "block";
+  $("modalOverlay").style.display = "block";
+}
+
+function closeRequestModal() {
+  $("requestModal").style.display = "none";
+  $("modalOverlay").style.display = "none";
+  $("reqType").value = "";
+  $("itemsList").innerHTML = "";
+  $("requestModal").dataset.editingId = "";
+}
+
+function initializeItemsList() {
+  $("itemsList").innerHTML = `
+    <div class="item-row" style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+      <input type="text" class="item-name" placeholder="Item name" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+      <input type="number" class="item-qty" value="1" min="1" style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+      <button class="btn btn-success btn-sm" onclick="addItemField()" style="padding: 8px 12px;">+</button>
+    </div>
+  `;
+}
+
+function addItemField() {
+  let itemsList = $("itemsList");
+  let itemCount = itemsList.querySelectorAll(".item-row").length;
+  
+  let newRow = document.createElement("div");
+  newRow.className = "item-row";
+  newRow.style.cssText = "display: flex; gap: 8px; margin-bottom: 10px; align-items: center;";
+  newRow.innerHTML = `
+    <input type="text" class="item-name" placeholder="Item name" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+    <input type="number" class="item-qty" value="1" min="1" style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+    <button class="btn btn-danger btn-sm" onclick="removeItemField(this)" style="padding: 8px 12px;">×</button>
+  `;
+  itemsList.appendChild(newRow);
+}
+
+function removeItemField(button) {
+  button.parentElement.remove();
+}
+
+function handleAddRequest() {
+  let user = getCurrentUser();
+  if (!user) return alert("You must be logged in");
+
+  let type = $("reqType").value.trim();
+  if (!type) return alert("Select request type");
+
+  let itemRows = $("itemsList").querySelectorAll(".item-row");
+  let items = [];
+
+  itemRows.forEach(row => {
+    let name = row.querySelector(".item-name").value.trim();
+    let qty = parseInt(row.querySelector(".item-qty").value) || 1;
+    
+    if (name) {
+      items.push({ name, quantity: qty });
+    }
+  });
+
+  if (items.length === 0) return alert("Add at least one item");
+
+  let requests = load("requests");
+  let editingId = $("requestModal").dataset.editingId;
+
+  if (editingId) {
+    // Edit 
+    let request = requests.find(r => r.id === Number(editingId));
+    if (request) {
+      request.type = type;
+      request.items = items;
+      request.date = new Date().toLocaleDateString();
+    }
+  } else {
+    // Create 
+    requests.push({
+      id: Date.now(),
+      type,
+      items,
+      status: "Pending",
+      date: new Date().toLocaleDateString(),
+      employeeEmail: user.email
+    });
+  }
+
+  save("requests", requests);
+  closeRequestModal();
+  loadRequests();
+}
+
+function loadRequests() {
+  let user = getCurrentUser();
+  if (!user) return;
+
+  let requests = load("requests").filter(r => r.employeeEmail === user.email);
+
+  if (requests.length === 0) {
+    $("requestsList").innerHTML = `
+      <p style="color: #999; margin: 20px 0;">You have no requests yet.</p>
+      <button class="btn btn-success" onclick="showRequestModal()">Create One</button>
+    `;
+    return;
+  }
+
+  let statusBadges = {
+    "Pending": "warning",
+    "Approved": "success",
+    "Rejected": "danger"
+  };
+
+  $("requestsList").innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Items</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${requests.map(r => `
+          <tr>
+            <td>${r.type}</td>
+            <td>
+              <ul style="margin: 0; padding-left: 20px;">
+                ${r.items.map(item => `<li>${item.name} (x${item.quantity})</li>`).join("")}
+              </ul>
+            </td>
+            <td>
+              <span class="badge badge-${statusBadges[r.status]}">${r.status}</span>
+            </td>
+            <td>${r.date}</td>
+            <td>
+              <button class="btn btn-primary btn-sm" onclick="editRequest(${r.id})">Edit</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteRequest(${r.id})">Delete</button>
+            </td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function editRequest(id) {
+  let requests = load("requests");
+  let request = requests.find(r => r.id === id);
+  if (!request) return;
+
+  // Populate modal with request data
+  $("reqType").value = request.type;
+  
+  // Clear and rebuild items list
+  let itemsList = $("itemsList");
+  itemsList.innerHTML = "";
+  
+  request.items.forEach((item, index) => {
+    if (index === 0) {
+    
+      itemsList.innerHTML += `
+        <div class="item-row" style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+          <input type="text" class="item-name" placeholder="Item name" value="${item.name}" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+          <input type="number" class="item-qty" value="${item.quantity}" min="1" style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+          <button class="btn btn-success btn-sm" onclick="addItemField()" style="padding: 8px 12px;">+</button>
+        </div>
+      `;
+    } else {
+      
+      itemsList.innerHTML += `
+        <div class="item-row" style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+          <input type="text" class="item-name" placeholder="Item name" value="${item.name}" style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+          <input type="number" class="item-qty" value="${item.quantity}" min="1" style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+          <button class="btn btn-danger btn-sm" onclick="removeItemField(this)" style="padding: 8px 12px;">×</button>
+        </div>
+      `;
+    }
+  });
+
+  // Store the request ID being edited
+  $("requestModal").dataset.editingId = id;
+  $("requestModal").style.display = "block";
+  $("modalOverlay").style.display = "block";
+}
+
+function deleteRequest(id) {
+  if (confirm("Are you sure you want to delete this request?")) {
+    save("requests", load("requests").filter(r => r.id !== id));
+    loadRequests();
+  }
+}
+
+/*  EMPLOYEES  */
+
+let editingEmployeeId = null;
+
+function showEmployeeForm() { 
+  clearEmployeeForm();
+  $("empFormTitle").textContent = "Add Employee";
+  
+  //  dropdown from departments list
+  let deptSelect = $("empDepartment");
+  let depts = load("departments");
+  
+  deptSelect.innerHTML = '<option value="">-- Select Department --</option>';
+  depts.forEach(d => {
+    deptSelect.innerHTML += `<option value="${d.id}|${d.name}">${d.name}</option>`;
+  });
+  
+  $("employeeForm").style.display = "block";
+}
+
+function hideEmployeeForm() { 
+  $("employeeForm").style.display = "none";
+  clearEmployeeForm();
+}
+
+function clearEmployeeForm() {
+  $("empID").value = "";
+  $("empEmail").value = "";
+  $("empPosition").value = "";
+  $("empDepartment").value = "";
+  $("empHireDate").value = "";
+  editingEmployeeId = null;
+}
+
+function handleAddEmployee() {
+  let empID = $("empID").value.trim();
+  let empEmail = $("empEmail").value.trim();
+  let position = $("empPosition").value.trim();
+  let deptData = $("empDepartment").value;
+  let hireDate = $("empHireDate").value;
+
+  if (!empID || !empEmail || !position || !deptData || !hireDate)
+    return alert("Fill all fields");
+
+  //  email exists in accounts
+  let users = load("users");
+  let user = users.find(u => u.email === empEmail);
+  
+  if (!user)
+    return alert("User email does not exist. Please create the account first.");
+
+  let [deptID, deptName] = deptData.split("|");
+  let employees = load("employees");
+
+  if (editingEmployeeId) {
+    // Edit 
+    let emp = employees.find(e => e.id === editingEmployeeId);
+    if (!emp) return;
+
+    // Check if Employee ID already exists 
+    if (empID !== emp.employeeID && employees.find(e => e.employeeID === empID))
+      return alert("Employee ID already exists");
+
+    emp.employeeID = empID;
+    emp.userID = user.id;
+    emp.userEmail = empEmail;
+    emp.position = position;
+    emp.deptID = Number(deptID);
+    emp.deptName = deptName;
+    emp.hireDate = hireDate;
+  } else {
+    // Create 
+    if (employees.find(e => e.employeeID === empID))
+      return alert("Employee ID already exists");
+
+    employees.push({
+      id: Date.now(),
+      employeeID: empID,
+      userID: user.id,
+      userEmail: empEmail,
+      position,
+      deptID: Number(deptID),
+      deptName,
+      hireDate
+    });
+  }
+
+  save("employees", employees);
+  hideEmployeeForm();
+  renderEmployeesTable();
+}
+
+function editEmployee(id) {
+  let employees = load("employees");
+  let emp = employees.find(e => e.id === id);
+  if (!emp) return;
+
+  
+  clearEmployeeForm();
+  $("empFormTitle").textContent = "Edit Employee";
+  
+  $("empID").value = emp.employeeID;
+  $("empEmail").value = emp.userEmail;
+  $("empPosition").value = emp.position;
+  $("empHireDate").value = emp.hireDate;
+  
+  // select department
+  let deptSelect = $("empDepartment");
+  let depts = load("departments");
+  
+  deptSelect.innerHTML = '<option value="">-- Select Department --</option>';
+  depts.forEach(d => {
+    let selected = d.id === emp.deptID ? "selected" : "";
+    deptSelect.innerHTML += `<option value="${d.id}|${d.name}" ${selected}>${d.name}</option>`;
+  });
+  
+  editingEmployeeId = id;
+  $("employeeForm").style.display = "block";
+}
+
+function renderEmployeesTable() {
+  let employees = load("employees");
+
+  $("employeesTable").innerHTML = employees.length
+    ? employees.map(e => `
+      <tr>
+        <td>${e.employeeID}</td>
+        <td>${e.userEmail}</td>
+        <td>${e.position}</td>
+        <td>${e.deptName}</td>
+        <td>
+          <button class="btn btn-primary btn-sm"
+            onclick="editEmployee(${e.id})">Edit</button>
+          <button class="btn btn-danger btn-sm"
+            onclick="deleteEmployee(${e.id})">Delete</button>
+        </td>
+      </tr>`).join("")
+    : '<tr><td colspan="5" style="text-align: center;">No employees</td></tr>';
+}
+
+function deleteEmployee(id) {
+  if (confirm("Are you sure you want to delete this employee?")) {
+    save("employees", load("employees").filter(e => e.id !== id));
+    renderEmployeesTable();
+  }
+}
+
+/*  DEPARTMENTS  */
+
+let editingDeptId = null;
+
+function showDepartmentForm() {
+  $("departmentForm").style.display = "block";
+}
+
+function hideDepartmentForm() {
+  $("departmentForm").style.display = "none";
+  $("deptName").value = "";
+  $("deptDesc").value = "";
+  editingDeptId = null;
+}
+
+function handleAddDepartment() {
+  let name = $("deptName").value.trim();
+  let desc = $("deptDesc").value.trim();
+  if (!name || !desc) return alert("Fill all fields");
+
+  let depts = load("departments");
+
+  if (editingDeptId) {
+    let d = depts.find(x => x.id === editingDeptId);
+    d.name = name;
+    d.desc = desc;
+  } else {
+    depts.push({ id: Date.now(), name, desc });
+  }
+
+  save("departments", depts);
+  hideDepartmentForm();
+  loadDepartments();
+  refreshDeptDropdown();
+}
+
+function editDepartment(id) {
+  let dept = load("departments").find(d => d.id === id);
+  if (!dept) return;
+
+  $("deptName").value = dept.name;
+  $("deptDesc").value = dept.desc;
+  editingDeptId = id;
+  showDepartmentForm();
+}
+
+function loadDepartments() {
+  let depts = load("departments");
+
+  $("departmentsTable").innerHTML = depts.length
+    ? depts.map(d => `
+      <tr>
+        <td>${d.name}</td>
+        <td>${d.desc}</td>
+        <td>
+          <button class="btn btn-primary btn-sm"
+            onclick="editDepartment(${d.id})">Edit</button>
+          <button class="btn btn-danger btn-sm"
+            onclick="deleteDepartment(${d.id})">Delete</button>
+        </td>
+      </tr>`).join("")
+    : '<tr><td colspan="3" style="text-align: center;">No departments</td></tr>';
+}
+
+function deleteDepartment(id) {
+  save("departments", load("departments").filter(d => d.id !== id));
+  loadDepartments();
+  refreshDeptDropdown();
+}
+
+/*  ACCOUNTS  */
+
+function showAddAccountForm() {
+  $("addAccountForm").style.display = "block";
+  $("accFirstName").value = "";
+  $("accLastName").value = "";
+  $("accEmail").value = "";
+  $("accPassword").value = "";
+  $("accRole").value = "user";
+  $("accVerified").checked = false;
+}
+
+function hideAddAccountForm() {
+  $("addAccountForm").style.display = "none";
+  $("accFirstName").value = "";
+  $("accLastName").value = "";
+  $("accEmail").value = "";
+  $("accPassword").value = "";
+  $("accRole").value = "user";
+  $("accVerified").checked = false;
+  $("addAccountForm").dataset.editingId = "";
+}
+
+function handleAddAccount() {
+  let firstName = $("accFirstName").value.trim();
+  let lastName = $("accLastName").value.trim();
+  let email = $("accEmail").value.trim();
+  let password = $("accPassword").value.trim();
+  let role = $("accRole").value;
+  let isVerified = $("accVerified").checked;
+  let editingId = $("addAccountForm").dataset.editingId;
+
+  if (!firstName || !lastName || !email)
+    return alert("Fill all fields");
+
+  let users = load("users");
+
+  if (editingId) {
+    // Edit 
+    let user = users.find(u => u.id === Number(editingId));
+    if (!user) return;
+
+    // Check if new email already exists 
+    if (email !== user.email && users.find(u => u.email === email)) {
+      return alert("Email already exists");
+    }
+
+    user.firstName = firstName;
+    user.lastName = lastName;
+    user.email = email;
+    if (password) user.password = password;
+    user.role = role;
+    user.isVerified = isVerified;
+  } else {
+    // Create mode
+    if (!password) return alert("Password is required for new accounts");
+
+    // Check if email already exists
+    if (users.find(u => u.email === email))
+      return alert("Email already exists");
+
+    users.push({
+      id: Date.now(),
+      firstName,
+      lastName,
+      email,
+      password,
+      role,
+      isVerified
+    });
+  }
+
+  save("users", users);
+  hideAddAccountForm();
+  loadAccounts();
+}
+
+function loadAccounts() {
+  let accounts = load("users");
+
+  $("accountsTable").innerHTML = accounts.length
+    ? accounts.map(u => `
+      <tr>
+        <td>${u.firstName} ${u.lastName}</td>
+        <td>${u.email}</td>
+        <td>${u.role}</td>
+        <td>
+          <span style="color: ${u.isVerified ? '#28a745' : '#dc3545'}; font-size: 18px;">
+            ${u.isVerified ? '✓' : ''}
+          </span>
+        </td>
+        <td>
+          <button class="btn btn-primary btn-sm"
+            onclick="editAccount(${u.id})">Edit</button>
+          <button class="btn btn-warning btn-sm"
+            onclick="resetPassword(${u.id})">Reset Password</button>
+          <button class="btn btn-danger btn-sm"
+            onclick="deleteAccount(${u.id})">Delete</button>
+        </td>
+      </tr>`).join("")
+    : '<tr><td colspan="5" style="text-align: center;">No accounts</td></tr>';
+}
+
+function deleteAccount(id) {
+  let users = load("users");
+  let currentUser = getCurrentUser();
+  
+  // Prevent deleting 
+  if (currentUser && currentUser.id === id) {
+    alert("Cannot delete your own account while logged in");
+    return;
+  }
+
+  save("users", users.filter(u => u.id !== id));
+  loadAccounts();
+}
+
+function editAccount(id) {
+  let users = load("users");
+  let user = users.find(u => u.id === id);
+  if (!user) return;
+
+  $("accFirstName").value = user.firstName;
+  $("accLastName").value = user.lastName;
+  $("accEmail").value = user.email;
+  $("accPassword").value = "";
+  $("accRole").value = user.role;
+  $("accVerified").checked = user.isVerified;
+  
+  // Store the user ID being edited
+  $("addAccountForm").dataset.editingId = id;
+  $("addAccountForm").style.display = "block";
+}
+
+function resetPassword(id) {
+  let users = load("users");
+  let user = users.find(u => u.id === id);
+  if (!user) return;
+
+  let newPassword = prompt(`Enter new password for ${user.email}:`);
+  if (newPassword === null) return; // User cancelled
+  
+  if (newPassword.trim() === "") {
+    return alert("Password cannot be empty");
+  }
+
+  user.password = newPassword.trim();
+  save("users", users);
+  alert("Password reset successfully!");
+  loadAccounts();
+}
+
+/*  INIT  */
+
+window.addEventListener("DOMContentLoaded", () => {
+  seedAdmin();
+  updateNavbar();
+  goToPage("home");
 });
